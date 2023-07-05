@@ -1,0 +1,4 @@
+.env
+__pycache__
+CONTROLLER_PASSWORD
+SERVER_ADDRESS
