@@ -115,6 +115,8 @@ def route_controller_register():
     _, auth_str = auth.split(" ", maxsplit=1)
     if not verify_signed_message(auth_str, CONTROLLER_PASSWORD, ttl=3600):
         return "", 401
+    if flask.request.headers.get("Upgrade") != "MeLaan":
+        return "", 426, {"Upgrade": "MeLaan"}
 
     def handler(raw_sock):
         sock = SignedLineBasedSocket(raw_sock, CONTROLLER_PASSWORD)

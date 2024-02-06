@@ -26,6 +26,12 @@ def get_ntp():
     return time.gmtime(secs)
 
 
+def keep_ntp_current():
+    while True:
+        machine.RTC().datetime(get_ntp())
+        time.sleep(3600)
+
+
 class Connection:
     def __init__(self, addr, method, path, headers, recv_callback):
         ip, port = addr.split(":")
@@ -40,7 +46,7 @@ class Connection:
             self.sock.sendall(f"{key}: {val}\r\n".encode())
         self.sock.sendall(b"\r\n")
         self.recv_callback = recv_callback
-        _thread.start_new_thread(self.recv_loop, tuple())
+        _thread.start_new_thread(self.recv_loop, ())
 
     def recv_loop(self):
         buf = b""
@@ -122,7 +128,7 @@ class SignedConnection(Connection):
             super().recv(line)
 
 
-machine.RTC().datetime(get_ntp())
+_thread.start_new_thread(keep_ntp_current, ())
 
 
 conn = SignedConnection(
