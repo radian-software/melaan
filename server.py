@@ -2,78 +2,28 @@ import dotenv
 
 dotenv.load_dotenv()
 
-import base64
-import hmac
+from dataclasses import dataclass
+from datetime import datetime
 import os
-import time
+import threading
+from typing import cast
 
 import flask
-import werkzeug.datastructures
 
-CONTROLLER_PASSWORD = base64.b64decode(os.environ["CONTROLLER_PASSWORD"])
+CONTROLLER_PASSWORD = os.environ["CONTROLLER_PASSWORD"]
 REMOTE_PASSWORD = os.environ["REMOTE_PASSWORD"]
 
 
-app = flask.Flask(__name__)
-
-
-class State:
-    def __init__(self):
-        self.controller_is_healthy = False
-        self.last_controller_checkin = None
-
-
-state = State()
-
-
-@app.route("/api/v0/remote/open", methods=["POST"])
-def route_remote_open():
-    auth = flask.request.headers.get("Authorization")
-    if auth != f"Bearer {REMOTE_PASSWORD}":
-        return "Wrong or missing authentication", 401
-    if not state.controller_is_healthy:
-        return "Controller is offline", 503
-
-
-def sign_message(message, key, ts=None):
-    ts = ts or int(time.time())
-    signature = base64.b64encode(
-        hmac.digest(key, f"{ts}:{message}".encode(), "sha256")
-    ).decode()
-    return f"{ts}:{signature}:{message}"
-
-
-def verify_signed_message(signed_message, key, ttl=60):
-    cur_ts = int(time.time())
-    parts = signed_message.split(":", maxsplit=2)
-    if len(parts) != 3:
-        return False
-    ts, _, message = parts
-    try:
-        ts = int(ts)
-    except ValueError:
-        return False
-    if abs(ts - cur_ts) > ttl:
-        return False
-    return sign_message(message, key, ts=ts) == signed_message
-
-
-class DirectResponse(flask.Response):
-    def __init__(self, handler, status, headers):
-        super().__init__(None, status, headers)
+class DirectResponse:
+    def __init__(self, handler):
         self.handler = handler
-        self.raw_headers = headers
 
-    def get_wsgi_response(self, environ):
-        def iterator():
-            yield b""
-            self.handler(environ["werkzeug.socket"])
-
-        return (
-            iterator(),
-            self.status,
-            list(werkzeug.datastructures.Headers(self.raw_headers)),
-        )
+    def __call__(self, environ, start_response):
+        start_response(101, {"connection": "upgrade", "upgrade": "MeLaan"})
+        threading.Thread(
+            target=lambda: self.handler(environ["gunicorn.socket"]), daemon=True
+        ).start()
+        return [""]
 
 
 class LineBasedSocket:
@@ -90,36 +40,70 @@ class LineBasedSocket:
         line, self.recvline_buffer = self.recvline_buffer.split(b"\n", maxsplit=1)
         return line.decode()
 
-
-class SignedLineBasedSocket(LineBasedSocket):
-    def __init__(self, sock, key):
-        super().__init__(sock)
-        self.key = key
-
-    def send(self, line):
-        super().send(sign_message(line, self.key))
-
-    def recv(self):
-        while not verify_signed_message(line := super().recv(), self.key):
-            pass
-        return line
+    def close(self):
+        self.sock.close()
 
 
-@app.route("/api/v0/controller/register", methods=["POST"])
-def route_controller_register():
-    auth = flask.request.headers.get("Authorization")
-    if not auth:
-        return "", 401
-    if not auth.startswith("MeLaan "):
-        return "", 401
-    _, auth_str = auth.split(" ", maxsplit=1)
-    if not verify_signed_message(auth_str, CONTROLLER_PASSWORD, ttl=3600):
-        return "", 401
-    if flask.request.headers.get("Upgrade") != "MeLaan":
-        return "", 426, {"Upgrade": "MeLaan"}
+@dataclass
+class State:
+    controller_is_healthy = False
+    last_controller_checkin = None
 
-    def handler(raw_sock):
-        sock = SignedLineBasedSocket(raw_sock, CONTROLLER_PASSWORD)
-        sock.send("hello world")
+    def mark_healthy(self):
+        self.controller_is_healthy = True
+        self.last_controller_checkin = datetime.now()
 
-    return DirectResponse(handler, 101, {"Upgrade": "MeLaan"})
+    def mark_unhealthy(self):
+        self.controller_is_healthy = False
+
+
+class Server:
+    def __init__(self):
+        self.app = flask.Flask(__name__)
+        self.state = State()
+        self.socket = None
+
+        @self.app.route("/api/v0/controller/register", methods=["POST"])
+        def route_controller_register():
+            auth = flask.request.headers.get("authorization")
+            if auth != f"MeLaan {CONTROLLER_PASSWORD}":
+                return "", 401
+            if flask.request.headers.get("upgrade") != "MeLaan":
+                return "", 426, {"upgrade": "MeLaan"}
+
+            def handler(raw_sock):
+                if self.socket:
+                    self.state.mark_unhealthy()
+                    self.socket.close()
+                self.socket = LineBasedSocket(raw_sock)
+                self.socket.send("server ok")
+                threading.Thread(target=recv_loop, daemon=True).start()
+
+            def recv_loop():
+                if not self.socket:
+                    return
+                while True:
+                    try:
+                        line = self.socket.recv()
+                        print("recv:", line)
+                        if line == "client ok":
+                            self.state.mark_healthy()
+                    except Exception:
+                        self.state.mark_unhealthy()
+
+            return cast(flask.Response, DirectResponse(handler))
+
+        @self.app.route("/api/v0/remote/open", methods=["POST"])
+        def route_remote_open():
+            auth = flask.request.headers.get("Authorization")
+            if auth != f"Bearer {REMOTE_PASSWORD}":
+                return "Wrong or missing authentication", 401
+            if not self.state.controller_is_healthy:
+                return "Controller is offline", 503
+            return "Doing it!", 202
+
+        _ = route_controller_register
+        _ = route_remote_open
+
+
+app = Server().app
