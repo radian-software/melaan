@@ -1,6 +1,6 @@
 .PHONY: server
 server:
-	exec poetry run gunicorn server:app -b 0.0.0.0:8793 --access-logfile - -R --certfile melaan-server.crt --keyfile melaan-server.key --do-handshake-on-connect
+	poetry run gunicorn server:app -b 0.0.0.0:8793 --access-logfile - -R --certfile melaan-server.crt --keyfile melaan-server.key --do-handshake-on-connect
 
 .PHONY: shell
 shell:
