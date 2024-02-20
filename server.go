@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"sync"
@@ -18,6 +19,7 @@ import (
 const (
 	Timing_RequestStaleness  = 15 * time.Second
 	Timing_DoorOpenDuration  = 10 * time.Second
+	Timing_IODeadline        = 3 * time.Second
 	Timing_DoorOpenCooldown  = 1 * time.Second
 	Timing_HeartbeatInterval = 1 * time.Second
 )
@@ -119,11 +121,16 @@ type server struct {
 
 type controller struct {
 	server *server
+	id     int
 
 	conn   net.Conn
 	stream *bufio.ReadWriter
 
 	openAttemptMade syncvarTimePtr
+}
+
+func (c *controller) Log(format string, args ...interface{}) {
+	log.Println(fmt.Sprintf("controller %d: ", c.id) + fmt.Sprintf(format, args...))
 }
 
 func NewServer() *server {
@@ -138,10 +145,12 @@ func NewServer() *server {
 func (s *server) RegisterController(conn net.Conn, stream *bufio.ReadWriter) {
 	c := controller{
 		server:          s,
+		id:              rand.Int(),
 		conn:            conn,
 		stream:          stream,
 		openAttemptMade: NewSyncvarTimePtr(),
 	}
+	c.Log("registering")
 	s.activeController.Set(&c)
 	go c.doReads()
 	go c.doWrites()
@@ -155,6 +164,7 @@ func (c *controller) IsRegistered() bool {
 func (c *controller) Deregister() {
 	c.server.activeController.Update(func(cc *controller) *controller {
 		if c == cc {
+			c.Log("deregistering")
 			return nil
 		}
 		return cc
@@ -174,6 +184,7 @@ func (s *server) Open() (string, error) {
 	if c == nil {
 		return "", errors.New("no active controller")
 	}
+	c.Log("received open request")
 	now := time.Now()
 	s.openRequestReceived.UpdateToMaxWith(now)
 	var resp string
@@ -216,11 +227,13 @@ func (s *server) isHealthyString() (bool, string) {
 }
 
 func (c *controller) doReads() {
+	defer c.Deregister()
+	defer c.Log("terminating read loop")
 	for {
 		if !c.IsRegistered() {
 			return
 		}
-		c.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		c.conn.SetReadDeadline(time.Now().Add(Timing_IODeadline))
 		line, prefix, err := c.stream.ReadLine()
 		if err != nil {
 			log.Println("error reading line:", err)
@@ -232,17 +245,19 @@ func (c *controller) doReads() {
 		}
 		switch string(line) {
 		case "client ok":
+			c.Log("received client ok")
 			c.IfActive(func() {
 				c.server.lastControllerCheckin.UpdateToMaxWith(time.Now())
 			})
 		case "opened":
+			c.Log("door was opened")
 			c.IfActive(func() {
 				c.server.doorOpened.UpdateToMaxWith(time.Now())
 			})
 		case "closed":
-			// nothing to do
+			c.Log("door was closed")
 		default:
-			log.Println("unexpected line received")
+			c.Log("unexpected line received: %s", line)
 		}
 	}
 }
@@ -269,6 +284,8 @@ func (c *controller) shouldOpen(lastRequest *time.Time, lastAttempt *time.Time, 
 }
 
 func (c *controller) doWrites() {
+	defer c.Deregister()
+	defer c.Log("terminating write loop")
 	for {
 		var shouldOpen bool
 		c.server.openRequestReceived.WaitTimeout(func(lastRequest *time.Time) bool {
@@ -280,15 +297,17 @@ func (c *controller) doWrites() {
 		if !c.IsRegistered() {
 			return
 		}
-		c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+		c.conn.SetWriteDeadline(time.Now().Add(Timing_IODeadline))
 		if shouldOpen {
+			c.Log("writing open command")
 			_, err := c.conn.Write([]byte("open sesame\n"))
 			if err != nil {
 				log.Println("error writing line:", err)
 				return
 			}
 		}
-		c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+		c.conn.SetWriteDeadline(time.Now().Add(Timing_IODeadline))
+		c.Log("writing server ok")
 		_, err := c.conn.Write([]byte("server ok\n"))
 		if err != nil {
 			log.Println("error writing line:", err)
@@ -301,6 +320,7 @@ func (c *controller) doCloses() {
 	c.server.activeController.Wait(func(cc *controller) bool {
 		return c != cc
 	})
+	c.Log("closing socket")
 	c.conn.Close()
 }
 
@@ -319,21 +339,27 @@ func mainE() error {
 	r.HandleFunc("/api/v0/controller/register", func(w http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.ControllerPassword) {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
 		}
 		if req.Header.Get("upgrade") != "MeLaan" {
 			w.Header().Add("upgrade", "MeLaan")
 			w.WriteHeader(http.StatusUpgradeRequired)
+			return
 		}
 		h, ok := w.(http.Hijacker)
 		if !ok {
 			log.Println("http.ResponseWriter does not implement http.Hijacker")
 			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 		conn, stream, err := h.Hijack()
-		defer conn.Close()
 		if err != nil {
 			log.Println("unable to hijack http.ResponseWriter:", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, err = conn.Write([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: MeLaan\r\n\r\n"))
+		if err != nil {
+			return
 		}
 		s.RegisterController(conn, stream)
 	}).Methods("PUT")
