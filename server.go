@@ -39,37 +39,37 @@ func NewSyncvar[T any]() syncvar[T] {
 	}
 }
 
-func (s syncvar[T]) Get() T {
+func (s *syncvar[T]) Get() T {
 	s.Cond.L.Lock()
 	defer s.Cond.L.Unlock()
 	return s.Value
 }
 
-func (s syncvar[T]) Set(value T) {
+func (s *syncvar[T]) Set(value T) {
 	s.Cond.L.Lock()
 	defer s.Cond.L.Unlock()
 	s.Value = value
 	s.Cond.Broadcast()
 }
 
-func (s syncvar[T]) WithValue(task func(T)) {
+func (s *syncvar[T]) WithValue(task func(T)) {
 	s.Cond.L.Lock()
 	defer s.Cond.L.Unlock()
 	task(s.Value)
 }
 
-func (s syncvar[T]) Update(xform func(T) T) {
+func (s *syncvar[T]) Update(xform func(T) T) {
 	s.Cond.L.Lock()
 	defer s.Cond.L.Unlock()
 	s.Value = xform(s.Value)
 	s.Cond.Broadcast()
 }
 
-func (s syncvar[T]) Wait(pred func(T) bool) {
+func (s *syncvar[T]) Wait(pred func(T) bool) {
 	s.WaitTimeout(pred, 0)
 }
 
-func (s syncvar[T]) WaitTimeout(pred func(T) bool, timeout time.Duration) error {
+func (s *syncvar[T]) WaitTimeout(pred func(T) bool, timeout time.Duration) error {
 	expired := false
 	if timeout > 0 {
 		time.AfterFunc(timeout, func() {
@@ -81,7 +81,7 @@ func (s syncvar[T]) WaitTimeout(pred func(T) bool, timeout time.Duration) error 
 	}
 	s.Cond.L.Lock()
 	defer s.Cond.L.Unlock()
-	for pred(s.Value) || expired {
+	for !(pred(s.Value) || expired) {
 		s.Cond.Wait()
 	}
 	if expired {
@@ -98,7 +98,7 @@ func NewSyncvarTimePtr() syncvarTimePtr {
 	return syncvarTimePtr{NewSyncvar[*time.Time]()}
 }
 
-func (s syncvarTimePtr) UpdateToMaxWith(value time.Time) {
+func (s *syncvarTimePtr) UpdateToMaxWith(value time.Time) {
 	s.Update(func(existing *time.Time) *time.Time {
 		if existing == nil {
 			return &value
