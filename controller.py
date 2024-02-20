@@ -1,6 +1,5 @@
 import _thread
 import binascii
-import hashlib
 import socket
 import ssl
 import struct
@@ -50,7 +49,7 @@ class Connection:
             self.sock.sendall(f"{key}: {val}\r\n".encode())
         self.sock.sendall(b"\r\n")
         self._recv_callback = recv_callback
-        _thread.start_new_thread(self.recv_loop, ())
+        _thread.start_new_thread(self._recv_loop, ())
 
     def _recv_loop(self):
         buf = b""
@@ -58,7 +57,7 @@ class Connection:
             buf += self.sock.recv(1024)
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", maxsplit=1)
-                self.recv_callback(line.decode())
+                self._recv_callback(line.decode())
 
     def send(self, line):
         self.sock.sendall((line + "\n").encode())
@@ -80,4 +79,4 @@ while True:
             conn.send("client ok")
         except Exception:
             break
-        time.sleep(60)
+        time.sleep(1)
