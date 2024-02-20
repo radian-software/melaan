@@ -123,7 +123,7 @@ type controller struct {
 	conn   net.Conn
 	stream *bufio.ReadWriter
 
-	openAttemptMade syncvar[*time.Time]
+	openAttemptMade syncvarTimePtr
 }
 
 func NewServer() *server {
@@ -137,9 +137,10 @@ func NewServer() *server {
 
 func (s *server) RegisterController(conn net.Conn, stream *bufio.ReadWriter) {
 	c := controller{
-		server: s,
-		conn:   conn,
-		stream: stream,
+		server:          s,
+		conn:            conn,
+		stream:          stream,
+		openAttemptMade: NewSyncvarTimePtr(),
 	}
 	s.activeController.Set(&c)
 	go c.doReads()
