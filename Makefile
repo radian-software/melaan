@@ -1,10 +1,33 @@
+SHELL := bash
+SERIAL := picocom /dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_*-if00 -b115200
+
 .PHONY: server
 server:
-	poetry run gunicorn server:app -b 0.0.0.0:8793 --access-logfile - -R --certfile melaan-server.crt --keyfile melaan-server.key --do-handshake-on-connect
+	go run server.go
+
+.PHONY: server-watch
+server-watch:
+	watchexec -f server.go -r go run server.go
+
+.PHONY: controller
+controller:
+	python3 controller.py
+
+.PHONY: controller-watch
+controller-watch:
+	watchexec -f controller.py -r python3 controller.py
+
+.PHONY: install
+install:
+	$(SERIAL) -x250 --initstring="$$(python3 install.py)"$$'\r\r'
+
+.PHONY: controller-onboard
+controller-onboard:
+	$(SERIAL) --initstring="with open('main.py') as f: exec(f.read())"$$'\r\r'
 
 .PHONY: shell
 shell:
-	picocom /dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_*-if00 -b115200
+	$(SERIAL)
 
 .PHONY: ca
 ca:

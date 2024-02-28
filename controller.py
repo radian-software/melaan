@@ -9,30 +9,38 @@ with open("CONTROLLER_PASSWORD") as f:
     CONTROLLER_PASSWORD = f.read().strip()
 with open("SERVER_ADDRESS") as f:
     SERVER_ADDRESS = f.read().strip()
-
-
-ssl_context = ssl.create_default_context(cafile="melaan-ca.crt")
+with open("melaan-ca.crt", "b") as f:
+    CA_DATA = f.read()
 
 
 # https://stackoverflow.com/a/56613595
 def get_ntp():
     REF_TIME_1970 = 2208988800  # Reference time
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    query = b"\x1b" + 47 * b"\0"
-    sockaddr = socket.getaddrinfo("pool.ntp.org", 123)[0][-1]
-    client.sendto(query, sockaddr)
-    resp = client.recv(1024)
-    client.close()
+    client.settimeout(3)
+    try:
+        query = b"\x1b" + 47 * b"\0"
+        sockaddr = socket.getaddrinfo("pool.ntp.org", 123)[0][-1]
+        client.sendto(query, sockaddr)
+        resp = client.recv(1024)
+    finally:
+        client.close()
     secs = struct.unpack("!12I", resp)[10] - REF_TIME_1970
     return time.gmtime(secs)
 
 
 try:
     import machine
+
+    needs_ntp = True
 except ImportError:
-    pass
+    needs_ntp = False
+    ssl_context = ssl.create_default_context(cafile="melaan-ca.crt")
+    ssl_wrapper = lambda sock: ssl_context.wrap_socket(
+        sock, server_hostname="melaan-server"
+    )
 else:
-    machine.RTC().datetime(get_ntp())
+    ssl_wrapper = lambda sock: ssl.wrap_socket(sock)
 
 
 class Connection:
@@ -43,7 +51,7 @@ class Connection:
         sock.settimeout(3)
         sock.connect((ip, port))
         sock.setblocking(True)
-        self.sock = ssl_context.wrap_socket(sock, server_hostname="melaan-server")
+        self.sock = ssl_wrapper(sock)
         self.sock.sendall(f"{method} {path} HTTP/1.1\r\n".encode())
         self.sock.sendall(f"Host: {addr}\r\n".encode())
         for key, val in headers.items():
@@ -99,8 +107,11 @@ class Controller:
 
 ctl = Controller()
 while True:
-    print("starting connection")
     try:
+        if needs_ntp:
+            print("syncing ntp")
+            machine.RTC().datetime(get_ntp())
+        print("starting connection")
         conn = Connection(
             SERVER_ADDRESS,
             "PUT",

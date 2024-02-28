@@ -14,6 +14,7 @@ import (
 
 	"github.com/caarlos0/env/v10"
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -325,8 +326,12 @@ func (c *controller) doCloses() {
 }
 
 func mainE() error {
+	err := godotenv.Load()
+	if err != nil {
+		return err
+	}
 	cfg := config{}
-	err := env.Parse(&cfg)
+	err = env.Parse(&cfg)
 	if err != nil {
 		return err
 	}
