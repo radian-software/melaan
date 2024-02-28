@@ -24,14 +24,12 @@ def get_ntp():
     return time.gmtime(secs)
 
 
-def keep_ntp_current():
-    try:
-        import machine
-    except ImportError:
-        return
-    while True:
-        machine.RTC().datetime(get_ntp())
-        time.sleep(3600)
+try:
+    import machine
+except ImportError:
+    pass
+else:
+    machine.RTC().datetime(get_ntp())
 
 
 class Connection:
@@ -39,6 +37,7 @@ class Connection:
         ip, port = addr.split(":")
         port = int(port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.settimeout(3)
         self.sock.connect((ip, port))
         self.sock.setblocking(True)
         self.sock.sendall(f"{method} {path} HTTP/1.1\r\n".encode())
@@ -55,7 +54,12 @@ class Connection:
         found_http_body = False
         buf = b""
         while True:
-            buf += self.sock.recv(1024)
+            try:
+                buf += self.sock.recv(1024)
+            except Exception as e:
+                print(f"failed to receive data, closing: {e}")
+                self.sock.close()
+                return
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", maxsplit=1)
                 if not found_http_statusline:
@@ -78,36 +82,18 @@ class Connection:
 class Controller:
     def __init__(self):
         self.close_callback = None
-        self.last_server_ok = 0
 
     def recv(self, line):
         if line == "server ok":
             print("got server ok")
-            self.last_server_ok = time.time()
             return
         if line == "open sesame":
             print("would open door")
             return
         print("unexpected message from server:", line)
 
-    def monitor_loop(self):
-        while True:
-            time.sleep(1)
-            if time.time() - self.last_server_ok > 3 and self.close_callback:
-                print("dead connection, closing")
-                try:
-                    cb = self.close_callback
-                    self.close_callback = None
-                    cb()
-                except Exception:
-                    pass
-
-
-_thread.start_new_thread(keep_ntp_current, ())
-
 
 ctl = Controller()
-_thread.start_new_thread(ctl.monitor_loop, ())
 while True:
     print("starting connection")
     try:
@@ -118,7 +104,6 @@ while True:
             {"Authorization": f"MeLaan {CONTROLLER_PASSWORD}", "Upgrade": "MeLaan"},
             ctl.recv,
         )
-        ctl.close_callback = conn.sock.close
     except Exception as e:
         print(f"failed to connect, {e}")
         time.sleep(1)
@@ -130,6 +115,10 @@ while True:
             conn.send("client ok")
             time.sleep(1)
         except Exception as e:
-            print(f"failed to send client ok, {e}")
+            print(f"failed to send client ok, closing: {e}")
+            try:
+                conn.sock.close()
+            except Exception:
+                pass
             break
     time.sleep(1)
