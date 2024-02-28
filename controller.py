@@ -98,7 +98,7 @@ class Connection:
                 char = self.sock.read(1)
                 buf += char
                 if not char:
-                    time.sleep(0.5)
+                    print("receive socket is closed, terminating")
             except Exception as e:
                 print(f"failed to receive data, closing: {e}")
                 self.sock.close()
