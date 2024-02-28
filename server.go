@@ -393,6 +393,7 @@ func mainE() error {
 		if err != nil {
 			w.WriteHeader(http.StatusBadGateway)
 			w.Write([]byte(err.Error()))
+			return
 		}
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(resp + "\n"))
