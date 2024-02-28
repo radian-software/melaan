@@ -306,6 +306,7 @@ func (c *controller) doWrites() {
 				log.Println("error writing line:", err)
 				return
 			}
+			c.openAttemptMade.UpdateToMaxWith(time.Now())
 		}
 		c.conn.SetWriteDeadline(time.Now().Add(Timing_IODeadline))
 		c.Log("writing server ok")
