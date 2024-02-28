@@ -9,6 +9,8 @@ with open("CONTROLLER_PASSWORD") as f:
     CONTROLLER_PASSWORD = f.read().strip()
 with open("SERVER_ADDRESS") as f:
     SERVER_ADDRESS = f.read().strip()
+with open("WIFI_CREDENTIALS") as f:
+    WIFI_SSID, WIFI_PASSWORD = f.read().strip().split(":")
 with open("melaan-ca.crt", "b") as f:
     CA_DATA = f.read()
 
@@ -29,12 +31,18 @@ def get_ntp():
     return time.gmtime(secs)
 
 
+def struct_time_to_rtc(struct):
+    year, month, day, hour, minute, second, wday, yday = struct
+    _ = yday
+    return year, month, day, wday, hour, minute, second, 0
+
+
 try:
     import machine
 
-    needs_ntp = True
+    onboard = True
 except ImportError:
-    needs_ntp = False
+    onboard = False
     ssl_context = ssl.create_default_context(cafile="melaan-ca.crt")
     ssl_wrapper = lambda sock: ssl_context.wrap_socket(
         sock, server_hostname="melaan-server"
@@ -70,6 +78,7 @@ class Connection:
                 buf += self.sock.recv(1024)
             except Exception as e:
                 print(f"failed to receive data, closing: {e}")
+                print(e)
                 self.sock.close()
                 return
             while b"\n" in buf:
@@ -105,12 +114,33 @@ class Controller:
         print("unexpected message from server:", line)
 
 
+if onboard:
+    import network
+
+    nic = network.WLAN(network.STA_IF)
+    print("activating network card")
+    nic.active(True)
+    print("connecting to WLAN")
+    nic.connect(WIFI_SSID, WIFI_PASSWORD)
+    while (status := nic.status()) != network.STAT_GOT_IP:
+        print("waiting for wifi connectivity, status {status}")
+        time.sleep(1)
+    print("syncing rtc to ntp")
+    while True:
+        try:
+            machine.RTC().datetime(struct_time_to_rtc(get_ntp()))
+        except Exception as e:
+            print(f"failed to sync ntp, retrying: {e}")
+            print(e)
+            time.sleep(5)
+        else:
+            break
+    print("board online")
+
+
 ctl = Controller()
 while True:
     try:
-        if needs_ntp:
-            print("syncing ntp")
-            machine.RTC().datetime(get_ntp())
         print("starting connection")
         conn = Connection(
             SERVER_ADDRESS,
@@ -121,6 +151,7 @@ while True:
         )
     except Exception as e:
         print(f"failed to connect, {e}")
+        print(e)
         time.sleep(1)
         continue
     time.sleep(0.5)
@@ -131,6 +162,7 @@ while True:
             time.sleep(1)
         except Exception as e:
             print(f"failed to send client ok, closing: {e}")
+            print(e)
             try:
                 conn.sock.close()
             except Exception:

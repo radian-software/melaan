@@ -19,7 +19,7 @@ controller-watch:
 
 .PHONY: install
 install:
-	$(SERIAL) -x250 --initstring="$$(python3 install.py)"$$'\r\r'
+	$(SERIAL) --initstring="$$(python3 install.py)"$$'\r\r'
 
 .PHONY: controller-onboard
 controller-onboard:
