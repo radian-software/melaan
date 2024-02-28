@@ -99,6 +99,7 @@ class Connection:
                 buf += char
                 if not char:
                     print("receive socket is closed, terminating")
+                    return
             except Exception as e:
                 print(f"failed to receive data, closing: {e}")
                 self.sock.close()
