@@ -11,7 +11,7 @@ with open("SERVER_ADDRESS") as f:
     SERVER_ADDRESS = f.read().strip()
 with open("WIFI_CREDENTIALS") as f:
     WIFI_SSID, WIFI_PASSWORD = f.read().strip().split(":")
-with open("melaan-ca.crt", "b") as f:
+with open("melaan-ca.crt", "rb") as f:
     CA_DATA = f.read()
 
 
@@ -60,11 +60,11 @@ class Connection:
         sock.connect((ip, port))
         sock.setblocking(True)
         self.sock = ssl_wrapper(sock)
-        self.sock.sendall(f"{method} {path} HTTP/1.1\r\n".encode())
-        self.sock.sendall(f"Host: {addr}\r\n".encode())
+        self.sock.write(f"{method} {path} HTTP/1.1\r\n".encode())
+        self.sock.write(f"Host: {addr}\r\n".encode())
         for key, val in headers.items():
-            self.sock.sendall(f"{key}: {val}\r\n".encode())
-        self.sock.sendall(b"\r\n")
+            self.sock.write(f"{key}: {val}\r\n".encode())
+        self.sock.write(b"\r\n")
         self._recv_callback = recv_callback
         self._lock = _thread.allocate_lock()
         _thread.start_new_thread(self._recv_loop, ())
@@ -75,14 +75,13 @@ class Connection:
         buf = b""
         while True:
             try:
-                buf += self.sock.recv(1024)
+                buf += self.sock.read(1024)
             except Exception as e:
                 print(f"failed to receive data, closing: {e}")
-                print(e)
                 self.sock.close()
                 return
             while b"\n" in buf:
-                line, buf = buf.split(b"\n", maxsplit=1)
+                line, buf = buf.split(b"\n", 1)
                 if not found_http_statusline:
                     print("found http statusline")
                     assert line.startswith(b"HTTP/1.1 101 "), line
@@ -97,7 +96,7 @@ class Connection:
 
     def send(self, line):
         with self._lock:
-            self.sock.sendall((line + "\n").encode())
+            self.sock.write((line + "\n").encode())
 
 
 class Controller:
@@ -131,7 +130,6 @@ if onboard:
             machine.RTC().datetime(struct_time_to_rtc(get_ntp()))
         except Exception as e:
             print(f"failed to sync ntp, retrying: {e}")
-            print(e)
             time.sleep(5)
         else:
             break
@@ -149,9 +147,9 @@ while True:
             {"Authorization": f"MeLaan {CONTROLLER_PASSWORD}", "Upgrade": "MeLaan"},
             ctl.recv,
         )
+        print("connected successfully")
     except Exception as e:
         print(f"failed to connect, {e}")
-        print(e)
         time.sleep(1)
         continue
     time.sleep(0.5)
