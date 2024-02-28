@@ -344,6 +344,7 @@ func mainE() error {
 	r.HandleFunc("/api/v0/controller/register", func(w http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.ControllerPassword) {
 			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("unauthorized"))
 			return
 		}
 		if req.Header.Get("upgrade") != "MeLaan" {
@@ -371,6 +372,7 @@ func mainE() error {
 	r.HandleFunc("/api/v0/remote/status", func(w http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.RemotePassword) {
 			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("unauthorized"))
 			return
 		}
 		ok, status := s.isHealthyString()
@@ -384,6 +386,7 @@ func mainE() error {
 	r.HandleFunc("/api/v0/remote/open", func(w http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.RemotePassword) {
 			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("unauthorized"))
 			return
 		}
 		resp, err := s.Open()
