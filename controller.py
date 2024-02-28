@@ -4,7 +4,27 @@ import ssl
 import struct
 import time
 
-# These files should be created manually on the micropython filesystem
+global_failure_count = 0
+
+
+def deal_with_failure(num_failures=1):
+    try:
+        import machine
+    except ImportError:
+        return
+    global global_failure_count
+    global_failure_count += num_failures
+    if global_failure_count > 30:
+        print("something is fucked up, rebooting")
+        machine.reset()
+
+
+def deal_with_success():
+    global global_failure_count
+    global_failure_count = 0
+
+
+# these files should be created manually on the micropython filesystem
 with open("CONTROLLER_PASSWORD") as f:
     CONTROLLER_PASSWORD = f.read().strip()
 with open("SERVER_ADDRESS") as f:
@@ -95,7 +115,7 @@ class Connection:
                         print("found end of http headers")
                         found_http_body = True
                     continue
-                self._recv_callback(line.decode())
+                self._recv_callback(line.decode(), self.send)
 
     def send(self, line):
         with self._lock:
@@ -107,13 +127,14 @@ class Controller:
         self.close_callback = None
         self.last_server_ok = time.time()
 
-    def recv(self, line):
+    def recv(self, line, write_callback):
         if line == "server ok":
             print("got server ok")
             self.last_server_ok = time.time()
             return
         if line == "open sesame":
             print("would open door")
+            write_callback("opened")
             return
         print("unexpected message from server:", line)
 
@@ -128,7 +149,9 @@ if onboard:
     nic.connect(WIFI_SSID, WIFI_PASSWORD)
     while (status := nic.status()) != network.STAT_GOT_IP:
         print(f"waiting for wifi connectivity, status {status}")
+        deal_with_failure()
         time.sleep(1)
+    deal_with_success()
     print("confirming online status")
     while True:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -137,6 +160,7 @@ if onboard:
             sock.connect(("9.9.9.9", 53))
         except Exception as e:
             print(f"not online, retrying: {e}")
+            deal_with_failure(5)
             time.sleep(5)
         else:
             break
@@ -145,15 +169,18 @@ if onboard:
                 sock.close()
             except Exception:
                 pass
+    deal_with_success()
     print("syncing rtc to ntp")
     while True:
         try:
             machine.RTC().datetime(struct_time_to_rtc(get_ntp()))
         except Exception as e:
             print(f"failed to sync ntp, retrying: {e}")
+            deal_with_failure(5)
             time.sleep(5)
         else:
             break
+    deal_with_success()
     print("board online")
 
 
@@ -168,9 +195,11 @@ while True:
             {"Authorization": f"MeLaan {CONTROLLER_PASSWORD}", "Upgrade": "MeLaan"},
             ctl.recv,
         )
+        deal_with_success()
         print("connected successfully")
     except Exception as e:
         print(f"failed to connect, {e}")
+        deal_with_failure()
         time.sleep(1)
         continue
     time.sleep(0.5)
