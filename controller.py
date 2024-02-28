@@ -75,7 +75,10 @@ class Connection:
         buf = b""
         while True:
             try:
-                buf += self.sock.read(1024)
+                char = self.sock.read(1)
+                buf += char
+                if not char:
+                    time.sleep(0.5)
             except Exception as e:
                 print(f"failed to receive data, closing: {e}")
                 self.sock.close()
