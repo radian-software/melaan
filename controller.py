@@ -131,8 +131,8 @@ if onboard:
         time.sleep(1)
     print("confirming online status")
     while True:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(3)
             sock.connect(("9.9.9.9", 53))
         except Exception as e:
@@ -140,6 +140,11 @@ if onboard:
             time.sleep(5)
         else:
             break
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
     print("syncing rtc to ntp")
     while True:
         try:
