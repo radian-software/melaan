@@ -105,10 +105,12 @@ class Connection:
 class Controller:
     def __init__(self):
         self.close_callback = None
+        self.last_server_ok = time.time()
 
     def recv(self, line):
         if line == "server ok":
             print("got server ok")
+            self.last_server_ok = time.time()
             return
         if line == "open sesame":
             print("would open door")
@@ -125,8 +127,19 @@ if onboard:
     print("connecting to WLAN")
     nic.connect(WIFI_SSID, WIFI_PASSWORD)
     while (status := nic.status()) != network.STAT_GOT_IP:
-        print("waiting for wifi connectivity, status {status}")
+        print(f"waiting for wifi connectivity, status {status}")
         time.sleep(1)
+    print("confirming online status")
+    while True:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3)
+            sock.connect(("9.9.9.9", 53))
+        except Exception as e:
+            print(f"not online, retrying: {e}")
+            time.sleep(5)
+        else:
+            break
     print("syncing rtc to ntp")
     while True:
         try:
@@ -169,4 +182,10 @@ while True:
             except Exception:
                 pass
             break
+        if time.time() - ctl.last_server_ok > 5:
+            print("connection became stale, closing")
+            try:
+                conn.sock.close()
+            except Exception:
+                pass
     time.sleep(1)
