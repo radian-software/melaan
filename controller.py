@@ -11,6 +11,9 @@ with open("SERVER_ADDRESS") as f:
     SERVER_ADDRESS = f.read().strip()
 
 
+ssl_context = ssl.create_default_context(cafile="melaan-ca.crt")
+
+
 # https://stackoverflow.com/a/56613595
 def get_ntp():
     REF_TIME_1970 = 2208988800  # Reference time
@@ -36,10 +39,11 @@ class Connection:
     def __init__(self, addr, method, path, headers, recv_callback):
         ip, port = addr.split(":")
         port = int(port)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.settimeout(3)
-        self.sock.connect((ip, port))
-        self.sock.setblocking(True)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
+        sock.connect((ip, port))
+        sock.setblocking(True)
+        self.sock = ssl_context.wrap_socket(sock, server_hostname="melaan-server")
         self.sock.sendall(f"{method} {path} HTTP/1.1\r\n".encode())
         self.sock.sendall(f"Host: {addr}\r\n".encode())
         for key, val in headers.items():
