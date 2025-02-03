@@ -85,7 +85,6 @@ class Connection:
         port = int(port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            sock.setblocking(True)
             sock.settimeout(3)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.connect((ip, port))
@@ -213,7 +212,12 @@ while True:
         log("connected successfully")
     except Exception as e:
         log(f"failed to connect, {e}")
-        deal_with_failure()
+        if "EINPROGRESS" in str(e):
+            # Board is fucked
+            deal_with_failure(1000)
+        else:
+            # Something unexpected
+            deal_with_failure(1)
         time.sleep(1)
         continue
     time.sleep(0.5)
