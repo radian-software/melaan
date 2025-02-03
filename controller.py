@@ -87,6 +87,7 @@ class Connection:
         try:
             sock.setblocking(True)
             sock.settimeout(3)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.connect((ip, port))
             self.sock = ssl_wrapper(sock)
             self.sock.write(f"{method} {path} HTTP/1.1\r\n".encode())
