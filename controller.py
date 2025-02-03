@@ -149,7 +149,7 @@ class Controller:
             log("would open door")
             write_callback("opened")
             return
-        log("unexpected message from server:", line)
+        log(f"unexpected message from server: {line}")
 
 
 if onboard:
@@ -223,7 +223,6 @@ while True:
             time.sleep(1)
         except Exception as e:
             log(f"failed to send client ok, closing: {e}")
-            log(e)
             try:
                 conn.sock.close()
             except Exception:
