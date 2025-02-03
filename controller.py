@@ -84,18 +84,22 @@ class Connection:
         ip, port = addr.split(":")
         port = int(port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setblocking(True)
-        sock.settimeout(3)
-        sock.connect((ip, port))
-        self.sock = ssl_wrapper(sock)
-        self.sock.write(f"{method} {path} HTTP/1.1\r\n".encode())
-        self.sock.write(f"Host: {addr}\r\n".encode())
-        for key, val in headers.items():
-            self.sock.write(f"{key}: {val}\r\n".encode())
-        self.sock.write(b"\r\n")
-        self._recv_callback = recv_callback
-        self._lock = _thread.allocate_lock()
-        _thread.start_new_thread(self._recv_loop, ())
+        try:
+            sock.setblocking(True)
+            sock.settimeout(3)
+            sock.connect((ip, port))
+            self.sock = ssl_wrapper(sock)
+            self.sock.write(f"{method} {path} HTTP/1.1\r\n".encode())
+            self.sock.write(f"Host: {addr}\r\n".encode())
+            for key, val in headers.items():
+                self.sock.write(f"{key}: {val}\r\n".encode())
+            self.sock.write(b"\r\n")
+            self._recv_callback = recv_callback
+            self._lock = _thread.allocate_lock()
+            _thread.start_new_thread(self._recv_loop, ())
+        except Exception:
+            sock.close()
+            raise
 
     def _recv_loop(self):
         found_http_statusline = False
