@@ -4,6 +4,14 @@ import ssl
 import struct
 import time
 
+
+def log(msg):
+    year, month, day, hour, minute, second, *_ = time.gmtime()
+    print(
+        f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d} {msg}"
+    )
+
+
 global_failure_count = 0
 
 
@@ -15,7 +23,7 @@ def deal_with_failure(num_failures=1):
     global global_failure_count
     global_failure_count += num_failures
     if global_failure_count > 30:
-        print("something is fucked up, rebooting")
+        log("something is fucked up, rebooting")
         machine.reset()
 
 
@@ -98,22 +106,22 @@ class Connection:
                 char = self.sock.read(1)
                 buf += char
                 if not char:
-                    print("receive socket is closed, terminating")
+                    log("receive socket is closed, terminating")
                     return
             except Exception as e:
-                print(f"failed to receive data, closing: {e}")
+                log(f"failed to receive data, closing: {e}")
                 self.sock.close()
                 return
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
                 if not found_http_statusline:
-                    print("found http statusline")
+                    log("found http statusline")
                     assert line.startswith(b"HTTP/1.1 101 "), line
                     found_http_statusline = True
                     continue
                 if not found_http_body:
                     if line == b"\r":
-                        print("found end of http headers")
+                        log("found end of http headers")
                         found_http_body = True
                     continue
                 self._recv_callback(line.decode(), self.send)
@@ -130,37 +138,37 @@ class Controller:
 
     def recv(self, line, write_callback):
         if line == "server ok":
-            print("got server ok")
+            log("got server ok")
             self.last_server_ok = time.time()
             return
         if line == "open sesame":
-            print("would open door")
+            log("would open door")
             write_callback("opened")
             return
-        print("unexpected message from server:", line)
+        log("unexpected message from server:", line)
 
 
 if onboard:
     import network
 
     nic = network.WLAN(network.STA_IF)
-    print("activating network card")
+    log("activating network card")
     nic.active(True)
-    print("connecting to WLAN")
+    log("connecting to WLAN")
     nic.connect(WIFI_SSID, WIFI_PASSWORD)
     while (status := nic.status()) != network.STAT_GOT_IP:
-        print(f"waiting for wifi connectivity, status {status}")
+        log(f"waiting for wifi connectivity, status {status}")
         deal_with_failure()
         time.sleep(1)
     deal_with_success()
-    print("confirming online status")
+    log("confirming online status")
     while True:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             sock.settimeout(3)
             sock.connect(("9.9.9.9", 53))
         except Exception as e:
-            print(f"not online, retrying: {e}")
+            log(f"not online, retrying: {e}")
             deal_with_failure(5)
             time.sleep(5)
         else:
@@ -171,24 +179,24 @@ if onboard:
             except Exception:
                 pass
     deal_with_success()
-    print("syncing rtc to ntp")
+    log("syncing rtc to ntp")
     while True:
         try:
             machine.RTC().datetime(struct_time_to_rtc(get_ntp()))
         except Exception as e:
-            print(f"failed to sync ntp, retrying: {e}")
+            log(f"failed to sync ntp, retrying: {e}")
             deal_with_failure(5)
             time.sleep(5)
         else:
             break
     deal_with_success()
-    print("board online")
+    log("board online")
 
 
 ctl = Controller()
 while True:
     try:
-        print("starting connection")
+        log("starting connection")
         conn = Connection(
             SERVER_ADDRESS,
             "PUT",
@@ -197,28 +205,28 @@ while True:
             ctl.recv,
         )
         deal_with_success()
-        print("connected successfully")
+        log("connected successfully")
     except Exception as e:
-        print(f"failed to connect, {e}")
+        log(f"failed to connect, {e}")
         deal_with_failure()
         time.sleep(1)
         continue
     time.sleep(0.5)
     while True:
         try:
-            print("sending client ok")
+            log("sending client ok")
             conn.send("client ok")
             time.sleep(1)
         except Exception as e:
-            print(f"failed to send client ok, closing: {e}")
-            print(e)
+            log(f"failed to send client ok, closing: {e}")
+            log(e)
             try:
                 conn.sock.close()
             except Exception:
                 pass
             break
         if time.time() - ctl.last_server_ok > 5:
-            print("connection became stale, closing")
+            log("connection became stale, closing")
             try:
                 conn.sock.close()
             except Exception:
