@@ -26,9 +26,10 @@ const (
 )
 
 type config struct {
-	ControllerPassword string `env:"CONTROLLER_PASSWORD,notEmpty"`
-	RemotePassword     string `env:"REMOTE_PASSWORD,notEmpty"`
-	DisableTLS         bool   `env:"DISABLE_TLS"`
+	ControllerPassword     string `env:"CONTROLLER_PASSWORD,notEmpty"`
+	RemotePassword         string `env:"REMOTE_PASSWORD,notEmpty"`
+	RemotePasswordReadOnly string `env:"REMOTE_PASSWORD_READONLY,notEmpty"`
+	DisableTLS             bool   `env:"DISABLE_TLS"`
 }
 
 type syncvar[T any] struct {
@@ -371,7 +372,7 @@ func mainE() error {
 		s.RegisterController(conn, stream)
 	}).Methods("PUT")
 	r.HandleFunc("/api/v0/remote/status", func(w http.ResponseWriter, req *http.Request) {
-		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.RemotePassword) {
+		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.RemotePassword) && req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.RemotePasswordReadOnly) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte("unauthorized"))
 			return
