@@ -114,7 +114,10 @@ class Connection:
                     return
             except Exception as e:
                 log(f"failed to receive data, closing: {e}")
-                self.sock.close()
+                try:
+                    self.sock.close()
+                except Exception as e:
+                    log(f"failed to close: {e}")
                 return
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
@@ -181,7 +184,7 @@ if onboard:
             try:
                 sock.close()
             except Exception:
-                pass
+                log(f"failed to close: {e}")
     deal_with_success()
     log("syncing rtc to ntp")
     while True:
@@ -230,13 +233,13 @@ while True:
             log(f"failed to send client ok, closing: {e}")
             try:
                 conn.sock.close()
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"failed to close: {e}")
             break
         if time.time() - ctl.last_server_ok > 5:
             log("connection became stale, closing")
             try:
                 conn.sock.close()
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"failed to close: {e}")
     time.sleep(1)
