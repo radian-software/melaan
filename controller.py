@@ -87,6 +87,13 @@ class Connection:
         try:
             sock.settimeout(3)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # Documentation says to always use getaddrinfo first, but
+            # unfortunately there is no way to set a timeout on
+            # getaddrinfo, so if you use it, there's a chance your
+            # entire board will be bricked forever until you manually
+            # reset it. We thus can't handle resolving hostnames, as
+            # far as I can tell doing so is impossible without risking
+            # a freeze.
             sock.connect((ip, port))
             self.sock = ssl_wrapper(sock)
             self.sock.write(f"{method} {path} HTTP/1.1\r\n".encode())
