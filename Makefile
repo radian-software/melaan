@@ -1,5 +1,7 @@
+DEV ?= *
+
 SHELL := bash
-SERIAL := picocom /dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_*-if00 -b115200
+SERIAL := picocom /dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_$(DEV)-if00 -b115200
 
 .PHONY: server
 server:
