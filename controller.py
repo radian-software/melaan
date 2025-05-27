@@ -32,6 +32,18 @@ def deal_with_success():
     global_failure_count = 0
 
 
+def set_door_state(is_open):
+    try:
+        import machine
+    except ImportError:
+        return
+    machine.Pin(0, machine.Pin.OUT).value(is_open)
+
+
+# Safety
+set_door_state(False)
+
+
 # these files should be created manually on the micropython filesystem
 with open("CONTROLLER_PASSWORD") as f:
     CONTROLLER_PASSWORD = f.read().strip()
@@ -149,6 +161,7 @@ class Controller:
     def __init__(self):
         self.close_callback = None
         self.last_server_ok = time.time()
+        self.last_door_open = 0
 
     def recv(self, line, write_callback):
         if line == "server ok":
@@ -156,8 +169,8 @@ class Controller:
             self.last_server_ok = time.time()
             return
         if line == "open sesame":
-            log("would open door")
-            write_callback("opened")
+            log("preparing to open door")
+            self.last_door_open = time.time()
             return
         log(f"unexpected message from server: {line}")
 
@@ -232,6 +245,26 @@ while True:
         continue
     time.sleep(0.5)
     while True:
+        if time.time() - ctl.last_door_open < 15:
+            log("opening door")
+            # Make sure that under no circumstances do we leave the
+            # door open. Thus, do the entire open/close cycle in
+            # synchronous code. We can't just put it in another thread
+            # because there are only allowed to be 2 threads in
+            # micropython and the other one is busy already listening
+            # for inbound messages.
+            try:
+                set_door_state(True)
+                while time.time() - ctl.last_door_open < 15:
+                    try:
+                        log("sending client ok while door open")
+                        conn.send("client ok")
+                    except Exception as e:
+                        log(
+                            f"failed to send client ok, but deferring close while door open: {e}"
+                        )
+            finally:
+                set_door_state(False)
         try:
             log("sending client ok")
             conn.send("client ok")
