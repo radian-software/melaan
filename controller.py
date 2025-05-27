@@ -34,14 +34,35 @@ def deal_with_success():
 
 def set_door_state(is_open):
     try:
-        import machine
+        from machine import Pin
     except ImportError:
         return
-    machine.Pin(0, machine.Pin.OUT).value(is_open)
+    Pin(0, Pin.OUT).value(is_open)
+
+
+def set_health_state(status):
+    offline, online, connected, door_open = status
+    try:
+        from machine import Pin
+    except ImportError:
+        return
+    machine.Pin(2, Pin.OUT).value(offline)
+    machine.Pin(4, Pin.OUT).value(online)
+    machine.Pin(6, Pin.OUT).value(connected)
+    machine.Pin(8, Pin.OUT).value(door_open)
+
+
+STATUS_OFFLINE = (1, 0, 0, 0)
+STATUS_ONLINE = (0, 1, 0, 0)
+STATUS_CONNECTED = (0, 0, 1, 0)
+STATUS_OPEN = (0, 0, 1, 1)
+STATUS_OPEN_DISCONNECTED = (0, 1, 0, 1)
+STATUS_FUCKED = (1, 1, 0, 0)
 
 
 # Safety
 set_door_state(False)
+set_health_state(STATUS_OFFLINE)
 
 
 # these files should be created manually on the micropython filesystem
@@ -217,7 +238,8 @@ if onboard:
         else:
             break
     deal_with_success()
-    log("board online")
+    log("synced rtp, board online")
+    set_health_state(STATUS_ONLINE)
 
 
 ctl = Controller()
@@ -233,8 +255,10 @@ while True:
         )
         deal_with_success()
         log("connected successfully")
+        set_health_state(STATUS_CONNECTED)
     except Exception as e:
         log(f"failed to connect, {e}")
+        set_health_state(STATUS_FUCKED)
         if "EINPROGRESS" in str(e):
             # Board is fucked
             deal_with_failure(1000)
@@ -246,7 +270,6 @@ while True:
     time.sleep(0.5)
     while True:
         if time.time() - ctl.last_door_open < 15:
-            log("opening door")
             # Make sure that under no circumstances do we leave the
             # door open. Thus, do the entire open/close cycle in
             # synchronous code. We can't just put it in another thread
@@ -254,17 +277,31 @@ while True:
             # micropython and the other one is busy already listening
             # for inbound messages.
             try:
+                log("opening door")
                 set_door_state(True)
+                set_health_state(STATUS_OPEN)
+                try:
+                    log("reporting door open")
+                    conn.send("opened")
+                except Exception as e:
+                    log(
+                        f"failed to report door open, but deferring close while door open: {e}"
+                    )
+                    set_health_state(STATUS_OPEN_DISCONNECTED)
                 while time.time() - ctl.last_door_open < 15:
                     try:
                         log("sending client ok while door open")
                         conn.send("client ok")
+                        time.sleep(1)
                     except Exception as e:
                         log(
                             f"failed to send client ok, but deferring close while door open: {e}"
                         )
+                        set_health_state(STATUS_OPEN_DISCONNECTED)
             finally:
+                log("closing door")
                 set_door_state(False)
+                set_health_state(STATUS_CONNECTED)
         try:
             log("sending client ok")
             conn.send("client ok")
@@ -275,6 +312,7 @@ while True:
                 conn.sock.close()
             except Exception as e:
                 log(f"failed to close: {e}")
+            set_health_state(STATUS_ONLINE)
             break
         if time.time() - ctl.last_server_ok > 5:
             log("connection became stale, closing")
@@ -282,4 +320,5 @@ while True:
                 conn.sock.close()
             except Exception as e:
                 log(f"failed to close: {e}")
+            set_health_state(STATUS_ONLINE)
     time.sleep(1)
