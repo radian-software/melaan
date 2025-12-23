@@ -116,6 +116,7 @@ func (s *syncvarTimePtr) UpdateToMaxWith(value time.Time) {
 
 type server struct {
 	activeController      syncvar[*controller]
+	lastControllerConnect syncvarTimePtr
 	lastControllerCheckin syncvarTimePtr
 	openRequestReceived   syncvarTimePtr
 	doorOpened            syncvarTimePtr
@@ -138,6 +139,7 @@ func (c *controller) Log(format string, args ...interface{}) {
 func NewServer() *server {
 	return &server{
 		activeController:      NewSyncvar[*controller](),
+		lastControllerConnect: NewSyncvarTimePtr(),
 		lastControllerCheckin: NewSyncvarTimePtr(),
 		openRequestReceived:   NewSyncvarTimePtr(),
 		doorOpened:            NewSyncvarTimePtr(),
@@ -154,6 +156,7 @@ func (s *server) RegisterController(conn net.Conn, stream *bufio.ReadWriter) {
 	}
 	c.Log("registering")
 	s.activeController.Set(&c)
+	s.lastControllerConnect.UpdateToMaxWith(time.Now())
 	go c.doReads()
 	go c.doWrites()
 	go c.doCloses()
@@ -210,22 +213,32 @@ func (s *server) Open() (string, error) {
 	return resp, nil
 }
 
-func (s *server) isHealthy() (bool, *time.Duration) {
-	last := s.lastControllerCheckin.Get()
-	if last == nil {
-		return false, nil
-	}
-	since := time.Now().Sub(*last)
-	return last.After(time.Now().Add(-60 * time.Second)), &since
-}
+func (s *server) isHealthy() (bool, string) {
 
-func (s *server) isHealthyString() (bool, string) {
-	if ok, last := s.isHealthy(); ok {
-		return true, fmt.Sprintf("ok, last update %d seconds ago\n", int(last.Seconds()))
-	} else if last != nil {
-		return false, fmt.Sprintf("bad, last update %d minutes ago\n", int(last.Minutes()))
+	lastConnect := s.lastControllerConnect.Get()
+	if lastConnect == nil {
+		return false, fmt.Sprintf("bad, no connect yet\n")
 	}
-	return false, fmt.Sprintf("bad, no update yet\n")
+
+	lastCheckin := s.lastControllerCheckin.Get()
+	if lastCheckin == nil {
+		return false, fmt.Sprintf("bad, no check-in yet\n")
+	}
+
+	sinceConnect := time.Now().Sub(*lastConnect)
+	sinceCheckin := time.Now().Sub(*lastCheckin)
+
+	msg := fmt.Sprintf("last check-in %s ago, last connect %s ago", sinceCheckin, sinceConnect)
+	healthy := lastCheckin.After(time.Now().Add(-60 * time.Second))
+
+	var status string
+	if healthy {
+		status = "ok"
+	} else {
+		status = "bad"
+	}
+
+	return healthy, fmt.Sprintf("%s, %s\n", status, msg)
 }
 
 func (c *controller) doReads() {
@@ -249,6 +262,24 @@ func (c *controller) doReads() {
 		case "client ok":
 			c.Log("received client ok")
 			c.IfActive(func() {
+				// Check to make sure we have been connected for at least some time
+				// before we start recording the health pings. This way, if the
+				// client repeatedly only gets in one or two pings before breaking
+				// and reconnecting again, this will show as consistently being
+				// offline.
+				//
+				// If on the other hand the client only occasionally has to
+				// reconnect, say less than once per minute, it will show as
+				// consistently being online.
+				lastConnect := c.server.lastControllerConnect.Get()
+				if lastConnect == nil {
+					c.Log("ignore client ok due to no connect info !?")
+					return
+				}
+				if lastConnect.After(time.Now().Add(-30 * time.Second)) {
+					c.Log("ignore client ok due to recent reconnect")
+					return
+				}
 				c.server.lastControllerCheckin.UpdateToMaxWith(time.Now())
 			})
 		case "opened":
@@ -377,7 +408,7 @@ func mainE() error {
 			w.Write([]byte("unauthorized"))
 			return
 		}
-		ok, status := s.isHealthyString()
+		ok, status := s.isHealthy()
 		if ok {
 			w.WriteHeader(http.StatusOK)
 		} else {
