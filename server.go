@@ -225,8 +225,8 @@ func (s *server) isHealthy() (bool, string) {
 		return false, fmt.Sprintf("bad, no check-in yet\n")
 	}
 
-	sinceConnect := time.Now().Sub(*lastConnect)
-	sinceCheckin := time.Now().Sub(*lastCheckin)
+	sinceConnect := time.Now().Sub(*lastConnect).Round(time.Second)
+	sinceCheckin := time.Now().Sub(*lastCheckin).Round(time.Second)
 
 	msg := fmt.Sprintf("last check-in %s ago, last connect %s ago", sinceCheckin, sinceConnect)
 	healthy := lastCheckin.After(time.Now().Add(-60 * time.Second))
