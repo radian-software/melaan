@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 )
 
@@ -369,12 +368,12 @@ func mainE() error {
 		return err
 	}
 	s := NewServer()
-	r := mux.NewRouter()
-	r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+	r := http.NewServeMux()
+	r.HandleFunc("GET /health", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok\n"))
-	}).Methods("GET")
-	r.HandleFunc("/api/v0/controller/register", func(w http.ResponseWriter, req *http.Request) {
+	})
+	r.HandleFunc("PUT /api/v0/controller/register", func(w http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.ControllerPassword) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte("unauthorized"))
@@ -401,8 +400,8 @@ func mainE() error {
 			return
 		}
 		s.RegisterController(conn, stream)
-	}).Methods("PUT")
-	r.HandleFunc("/api/v0/remote/status", func(w http.ResponseWriter, req *http.Request) {
+	})
+	r.HandleFunc("GET /api/v0/remote/status", func(w http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.RemotePassword) && req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.RemotePasswordReadOnly) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte("unauthorized"))
@@ -415,8 +414,8 @@ func mainE() error {
 			w.WriteHeader(http.StatusBadGateway)
 		}
 		w.Write([]byte(status))
-	}).Methods("GET")
-	r.HandleFunc("/api/v0/remote/open", func(w http.ResponseWriter, req *http.Request) {
+	})
+	r.HandleFunc("POST /api/v0/remote/open", func(w http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("authorization") != fmt.Sprintf("MeLaan %s", cfg.RemotePassword) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte("unauthorized"))
@@ -430,7 +429,7 @@ func mainE() error {
 		}
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(resp + "\n"))
-	}).Methods("POST")
+	})
 	port, err := net.Listen("tcp", "0.0.0.0:8793")
 	if err != nil {
 		return err
