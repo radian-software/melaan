@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/caarlos0/env/v10"
+	"github.com/caarlos0/env/v11"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 )
