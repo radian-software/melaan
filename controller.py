@@ -80,7 +80,7 @@ with open("melaan-ca.crt", "rb") as f:
 def get_ntp():
     REF_TIME_1970 = 2208988800  # Reference time
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    client.settimeout(3)
+    client.settimeout(10)
     try:
         query = b"\x1b" + 47 * b"\0"
         sockaddr = socket.getaddrinfo("pool.ntp.org", 123)[0][-1]
@@ -118,7 +118,7 @@ class Connection:
         port = int(port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            sock.settimeout(3)
+            sock.settimeout(10)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             # Documentation says to always use getaddrinfo first, but
             # unfortunately there is no way to set a timeout on
@@ -213,7 +213,7 @@ if onboard:
     while True:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            sock.settimeout(3)
+            sock.settimeout(10)
             sock.connect(("9.9.9.9", 53))
         except Exception as e:
             log(f"not online, retrying: {e}")
@@ -292,7 +292,7 @@ while True:
                     try:
                         log("sending client ok while door open")
                         conn.send("client ok")
-                        time.sleep(1)
+                        time.sleep(3)
                     except Exception as e:
                         log(
                             f"failed to send client ok, but deferring close while door open: {e}"
@@ -305,7 +305,7 @@ while True:
         try:
             log("sending client ok")
             conn.send("client ok")
-            time.sleep(1)
+            time.sleep(3)
         except Exception as e:
             log(f"failed to send client ok, closing: {e}")
             try:
@@ -314,7 +314,7 @@ while True:
                 log(f"failed to close: {e}")
             set_health_state(STATUS_ONLINE)
             break
-        if time.time() - ctl.last_server_ok > 5:
+        if time.time() - ctl.last_server_ok > 30:
             log("connection became stale, closing")
             try:
                 conn.sock.close()

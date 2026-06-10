@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	Timing_RequestStaleness  = 15 * time.Second
+	Timing_RequestStaleness  = 30 * time.Second
 	Timing_DoorOpenDuration  = 10 * time.Second
-	Timing_IODeadline        = 3 * time.Second
+	Timing_IODeadline        = 10 * time.Second
 	Timing_DoorOpenCooldown  = 1 * time.Second
-	Timing_HeartbeatInterval = 1 * time.Second
+	Timing_HeartbeatInterval = 3 * time.Second
 )
 
 type config struct {
@@ -131,7 +131,7 @@ type controller struct {
 	openAttemptMade syncvarTimePtr
 }
 
-func (c *controller) Log(format string, args ...interface{}) {
+func (c *controller) Log(format string, args ...any) {
 	log.Println(fmt.Sprintf("controller %d: ", c.id) + fmt.Sprintf(format, args...))
 }
 
@@ -216,16 +216,16 @@ func (s *server) isHealthy() (bool, string) {
 
 	lastConnect := s.lastControllerConnect.Get()
 	if lastConnect == nil {
-		return false, fmt.Sprintf("bad, no connect yet\n")
+		return false, "bad, no connect yet\n"
 	}
 
 	lastCheckin := s.lastControllerCheckin.Get()
 	if lastCheckin == nil {
-		return false, fmt.Sprintf("bad, no check-in yet\n")
+		return false, "bad, no check-in yet\n"
 	}
 
-	sinceConnect := time.Now().Sub(*lastConnect).Round(time.Second)
-	sinceCheckin := time.Now().Sub(*lastCheckin).Round(time.Second)
+	sinceConnect := time.Since(*lastConnect).Round(time.Second)
+	sinceCheckin := time.Since(*lastCheckin).Round(time.Second)
 
 	msg := fmt.Sprintf("last check-in %s ago, last connect %s ago", sinceCheckin, sinceConnect)
 	healthy := lastCheckin.After(time.Now().Add(-60 * time.Second))
