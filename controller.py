@@ -117,20 +117,15 @@ ssl_wrapper = lambda sock: ssl_context.wrap_socket(
 
 class Connection:
     def __init__(self, addr, method, path, headers, recv_callback):
-        ip, port = addr.split(":")
-        port = int(port)
+        # MicroPython 1.28.0 is supposed to be able to safely
+        # resolve DNS now, see: https://github.com/micropython/micropython/pull/18805
+        ip_or_hostname, port = addr.split(":")
+        sockaddr = socket.getaddrinfo(ip_or_hostname, int(port))[0][-1]
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             sock.settimeout(10)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # Documentation says to always use getaddrinfo first, but
-            # unfortunately there is no way to set a timeout on
-            # getaddrinfo, so if you use it, there's a chance your
-            # entire board will be bricked forever until you manually
-            # reset it. We thus can't handle resolving hostnames, as
-            # far as I can tell doing so is impossible without risking
-            # a freeze.
-            sock.connect((ip, port))
+            sock.connect(sockaddr)
             self.sock = ssl_wrapper(sock)
             self.sock.write(f"{method} {path} HTTP/1.1\r\n".encode())
             self.sock.write(f"Host: {addr}\r\n".encode())
