@@ -202,6 +202,7 @@ class Controller:
 if onboard:
     import network
 
+    network.hostname("melaan")
     nic = network.WLAN(network.STA_IF)
     log("activating network card")
     nic.active(True)
