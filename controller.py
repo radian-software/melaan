@@ -72,7 +72,7 @@ with open("SERVER_ADDRESS") as f:
     SERVER_ADDRESS = f.read().strip()
 with open("WIFI_CREDENTIALS") as f:
     WIFI_SSID, WIFI_PASSWORD = f.read().strip().split(":")
-with open("melaan-ca.crt", "rb") as f:
+with open("melaan-ca.der", "rb") as f:
     CA_DATA = f.read()
 
 
@@ -104,12 +104,15 @@ try:
     onboard = True
 except ImportError:
     onboard = False
-    ssl_context = ssl.create_default_context(cafile="melaan-ca.crt")
-    ssl_wrapper = lambda sock: ssl_context.wrap_socket(
-        sock, server_hostname="melaan-server"
-    )
-else:
-    ssl_wrapper = lambda sock: ssl.wrap_socket(sock)
+
+
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ssl_context.load_verify_locations(cadata=CA_DATA)
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+ssl_wrapper = lambda sock: ssl_context.wrap_socket(
+    sock,
+    server_hostname="melaan-server",
+)
 
 
 class Connection:
