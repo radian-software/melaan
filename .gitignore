@@ -1,6 +1,7 @@
 *.crt
 *.der
 *.key
+*.log
 .env
 __pycache__
 CONTROLLER_PASSWORD
