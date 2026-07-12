@@ -29,6 +29,7 @@ type config struct {
 	RemotePassword         string `env:"REMOTE_PASSWORD,notEmpty"`
 	RemotePasswordReadOnly string `env:"REMOTE_PASSWORD_READONLY,notEmpty"`
 	DisableTLS             bool   `env:"DISABLE_TLS"`
+	ServerPort             int    `env:"SERVER_PORT"`
 }
 
 type syncvar[T any] struct {
@@ -430,7 +431,7 @@ func mainE() error {
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(resp + "\n"))
 	})
-	port, err := net.Listen("tcp", "0.0.0.0:8793")
+	port, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", cfg.ServerPort))
 	if err != nil {
 		return err
 	}
@@ -440,10 +441,10 @@ func mainE() error {
 		TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){},
 	}
 	if cfg.DisableTLS {
-		log.Println("listening on http://0.0.0.0:8793")
+		log.Printf("listening on http://0.0.0.0:%d", cfg.ServerPort)
 		return server.Serve(port)
 	}
-	log.Println("listening on https://0.0.0.0:8793")
+	log.Printf("listening on https://0.0.0.0:%d", cfg.ServerPort)
 	return server.ServeTLS(port, "melaan-server.crt", "melaan-server.key")
 }
 

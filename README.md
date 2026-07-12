@@ -21,7 +21,8 @@ Create some files in the repository:
 * `melaan-server.key`: Leaf private key, PEM
 * `melaan-ca.der`: DER version of the CA
 * `.env`: values for `CONTROLLER_PASSWORD`, `REMOTE_PASSWORD`, and
-  `REMOTE_PASSWORD_READONLY` (all randomly generated passwords)
+  `REMOTE_PASSWORD_READONLY` (all randomly generated passwords) as
+  well as `SERVER_PORT` (probably >=1025)
 
 Here's an example, though you would certainly have to adjust the
 IP/port and wifi credentials at least:
@@ -36,6 +37,7 @@ step certificate format melaan-ca.crt > melaan-ca.der
 echo CONTROLLER_PASSWORD="$(< CONTROLLER_PASSWORD)" >> .env
 echo REMOTE_PASSWORD="$(head -c20 /dev/urandom | xxd -p)" >> .env
 echo REMOTE_PASSWORD_READONLY="$(head -c20 /dev/urandom | xxd -p)" >> .env
+echo SERVER_PORT="$(awk -F: '{print $2}' SERVER_ADDRESS)" >> .env
 ```
 
 The controller will run on the Raspberry Pi and connect to a local
