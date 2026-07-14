@@ -55,10 +55,12 @@ installation, for testing. To install onto the Raspberry Pi, [install
 MicroPython](https://micropython.org/download/RPI_PICO_W/) to the
 board via UF2, then once you have `make shell` working (install
 picocom and udev rules, make sure you have a data-capable microUSB
-cable), run `make install` to copy the script onto the filesystem.
-You'll also need to copy the three uppercase files mentioned above, as
-well as the DER file, this can be done by writing their contents
-manually at the MicroPython shell. Then terminate the shell to restart
-into the controller code. To update the code, interrupt with ctrl-C so
-that you get back to the shell, then `make install` and restart again.
-If it gets completely bricked, you can re-flash MicroPython via UF2.
+cable), run `make install` to copy the script and necessary files onto
+the filesystem. Then terminate the shell to restart into the
+controller code.
+
+To update the code, interrupt with ctrl-C so that you get back to the
+shell, then `make install` and restart again. If it gets completely
+bricked, see [wiping flash from
+UF2](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#reset-flash-memory)
+and reinstall MicroPython.
