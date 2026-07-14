@@ -6,6 +6,7 @@ import struct
 import time
 
 log_file = open("melaan.log", "a")
+log_lock = _thread.allocate_lock()
 
 
 def log(msg):
@@ -15,13 +16,14 @@ def log(msg):
         f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d} {msg}\n"
     )
     print(line, end="")
-    log_file.write(line)
-    log_file.flush()
-    if log_file.tell() > 300 * 1000:
-        log_file.close()
-        os.unlink("melaan.1.log")
-        os.rename("melaan.log", "melaan.1.log")
-        log_file = open("melaan.log", "a")
+    with log_lock:
+        log_file.write(line)
+        log_file.flush()
+        if log_file.tell() > 300 * 1000:
+            log_file.close()
+            os.unlink("melaan.1.log")
+            os.rename("melaan.log", "melaan.1.log")
+            log_file = open("melaan.log", "a")
 
 
 global_failure_count = 0
