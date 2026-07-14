@@ -13,13 +13,14 @@ def log(msg):
     global log_file
     year, month, day, hour, minute, second, *_ = time.gmtime()
     line = (
-        f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d} {msg}\n"
+        f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d} {msg}"
     )
-    print(line, end="")
+    print(line)
     with log_lock:
-        log_file.write(line)
+        log_file.write(line + "\n")
         log_file.flush()
         if log_file.tell() > 300 * 1000:
+            print("rotating log file")
             log_file.close()
             os.unlink("melaan.1.log")
             os.rename("melaan.log", "melaan.1.log")
