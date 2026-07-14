@@ -19,6 +19,7 @@ def log(msg):
     log_file.flush()
     if log_file.tell() > 300 * 1000:
         log_file.close()
+        os.unlink("melaan.1.log")
         os.rename("melaan.log", "melaan.1.log")
         log_file = open("melaan.log", "a")
 
